@@ -5,13 +5,15 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>PDF to Markdown Converter</title>
     <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css">
+    <!-- Add Marked.js for markdown rendering -->
+    <script src="https://cdn.jsdelivr.net/npm/marked/marked.min.js"></script>
     <style>
         body {
             padding-top: 2rem;
             background-color: #f8f9fa;
         }
         .container {
-            max-width: 800px;
+            max-width: 900px;
         }
         .upload-container {
             background-color: white;
@@ -42,6 +44,58 @@
             font-size: 48px;
             color: #6c757d;
             margin-bottom: 1rem;
+        }
+        /* Markdown viewer styles */
+        #markdown-container {
+            margin-top: 2rem;
+            padding: 2rem;
+            background-color: white;
+            border-radius: 10px;
+            box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+        }
+        .markdown-content {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            line-height: 1.6;
+        }
+        .section {
+            margin-bottom: 30px;
+            padding-bottom: 20px;
+            border-bottom: 1px solid #eee;
+        }
+        .section:last-child {
+            border-bottom: none;
+        }
+        .section-nav {
+            background-color: #f8f9fa;
+            border-radius: 5px;
+            padding: 10px;
+            margin-bottom: 20px;
+            position: sticky;
+            top: 10px;
+        }
+        .section-nav ul {
+            list-style-type: none;
+            padding-left: 0;
+            margin-bottom: 0;
+        }
+        .section-nav li {
+            margin-bottom: 5px;
+        }
+        .section-nav a {
+            color: #007bff;
+            text-decoration: none;
+        }
+        .section-nav a:hover {
+            text-decoration: underline;
+        }
+        pre {
+            background-color: #f8f9fa;
+            padding: 15px;
+            border-radius: 5px;
+            overflow-x: auto;
+        }
+        code {
+            font-family: 'Courier New', Courier, monospace;
         }
     </style>
 </head>
@@ -74,8 +128,11 @@
                     <h4 class="alert-heading">Processing Complete!</h4>
                     <p>Your PDF has been successfully converted to markdown.</p>
                 </div>
-                <a id="download-link" href="#" class="btn btn-success mb-3">Download Markdown File</a>
-                <button id="start-over" class="btn btn-outline-secondary">Process Another PDF</button>
+                <div class="btn-group mb-3">
+                    <a id="download-link" href="#" class="btn btn-success">Download Markdown File</a>
+                    <button id="view-markdown-btn" class="btn btn-primary">View Markdown</button>
+                    <button id="start-over" class="btn btn-outline-secondary">Process Another PDF</button>
+                </div>
             </div>
             
             <div id="error-container" class="hidden">
@@ -84,6 +141,21 @@
                     <p id="error-message"></p>
                 </div>
                 <button id="error-start-over" class="btn btn-outline-secondary">Try Again</button>
+            </div>
+        </div>
+        
+        <!-- Markdown viewer container -->
+        <div id="markdown-container" class="hidden">
+            <div class="row">
+                <div class="col-md-3">
+                    <div class="section-nav">
+                        <h5>Table of Contents</h5>
+                        <ul id="toc-list"></ul>
+                    </div>
+                </div>
+                <div class="col-md-9">
+                    <div id="markdown-content" class="markdown-content"></div>
+                </div>
             </div>
         </div>
     </div>
@@ -98,10 +170,16 @@
             const statusMessage = document.getElementById('status-message');
             const resultContainer = document.getElementById('result-container');
             const downloadLink = document.getElementById('download-link');
+            const viewMarkdownBtn = document.getElementById('view-markdown-btn');
             const startOver = document.getElementById('start-over');
             const errorContainer = document.getElementById('error-container');
             const errorMessage = document.getElementById('error-message');
             const errorStartOver = document.getElementById('error-start-over');
+            const markdownContainer = document.getElementById('markdown-container');
+            const markdownContent = document.getElementById('markdown-content');
+            const tocList = document.getElementById('toc-list');
+            
+            let currentOutputFile = null;
             
             // Prevent default drag behaviors
             ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
@@ -129,6 +207,13 @@
                 e.preventDefault();
                 if (fileInput.files.length > 0) {
                     uploadFile(fileInput.files[0]);
+                }
+            });
+            
+            // Handle view markdown button
+            viewMarkdownBtn.addEventListener('click', function() {
+                if (currentOutputFile) {
+                    fetchAndRenderMarkdown(currentOutputFile);
                 }
             });
             
@@ -183,6 +268,7 @@
                 progressContainer.classList.remove('hidden');
                 resultContainer.classList.add('hidden');
                 errorContainer.classList.add('hidden');
+                markdownContainer.classList.add('hidden');
                 
                 // Set initial status
                 progressBar.style.width = '10%';
@@ -206,6 +292,9 @@
                     progressBar.style.width = '100%';
                     statusMessage.textContent = 'Processing complete!';
                     
+                    // Save the output file path
+                    currentOutputFile = data.output_file.replace('/download/', '');
+                    
                     // Hide progress and show result
                     setTimeout(() => {
                         progressContainer.classList.add('hidden');
@@ -222,6 +311,127 @@
                 
                 // Simulate progress (since we don't have actual progress events from the backend)
                 simulateProgress();
+            }
+            
+            function fetchAndRenderMarkdown(filename) {
+                // Show loading state
+                resultContainer.classList.add('hidden');
+                progressContainer.classList.remove('hidden');
+                progressBar.style.width = '50%';
+                statusMessage.textContent = 'Loading markdown content...';
+                
+                // Fetch the markdown content
+                fetch(`/view_markdown/${filename}`)
+                    .then(response => {
+                        if (!response.ok) {
+                            return response.json().then(data => {
+                                throw new Error(data.error || 'Failed to load markdown content');
+                            });
+                        }
+                        return response.json();
+                    })
+                    .then(data => {
+                        // Update progress
+                        progressBar.style.width = '100%';
+                        statusMessage.textContent = 'Rendering markdown...';
+                        
+                        // Process the content
+                        const content = data.content;
+                        
+                        // Reset containers
+                        markdownContent.innerHTML = '';
+                        tocList.innerHTML = '';
+                        
+                        // Parse the sections
+                        const sections = parseMarkdownSections(content);
+                        
+                        // Build the table of contents
+                        sections.forEach((section, index) => {
+                            const li = document.createElement('li');
+                            const a = document.createElement('a');
+                            a.href = `#section-${index}`;
+                            a.textContent = section.title || `Page ${index + 1}`;
+                            li.appendChild(a);
+                            tocList.appendChild(li);
+                        });
+                        
+                        // Render each section with proper formatting
+                        sections.forEach((section, index) => {
+                            const sectionDiv = document.createElement('div');
+                            sectionDiv.className = 'section';
+                            sectionDiv.id = `section-${index}`;
+                            
+                            // Add section title
+                            const titleElement = document.createElement('h2');
+                            titleElement.textContent = section.title || `Page ${index + 1}`;
+                            sectionDiv.appendChild(titleElement);
+                            
+                            // Render markdown content
+                            const contentDiv = document.createElement('div');
+                            contentDiv.innerHTML = marked.parse(section.content);
+                            sectionDiv.appendChild(contentDiv);
+                            
+                            markdownContent.appendChild(sectionDiv);
+                        });
+                        
+                        // Hide progress and show markdown
+                        setTimeout(() => {
+                            progressContainer.classList.add('hidden');
+                            markdownContainer.classList.remove('hidden');
+                        }, 500);
+                    })
+                    .catch(error => {
+                        console.error('Error:', error);
+                        showError(error.message);
+                    });
+            }
+            
+            function parseMarkdownSections(content) {
+                // Split content by section separators (---) or ## Page
+                const sections = [];
+                let currentSection = { title: '', content: '' };
+                
+                // Split by lines
+                const lines = content.split('\n');
+                let inSection = false;
+                
+                for (let i = 0; i < lines.length; i++) {
+                    const line = lines[i];
+                    
+                    // Check if this is a section separator or new page title
+                    if (line.trim() === '---') {
+                        if (currentSection.content.trim()) {
+                            sections.push({...currentSection});
+                            currentSection = { title: '', content: '' };
+                        }
+                        inSection = false;
+                    } else if (line.trim().startsWith('## Page')) {
+                        if (currentSection.content.trim()) {
+                            sections.push({...currentSection});
+                        }
+                        currentSection = { 
+                            title: line.trim(),
+                            content: ''
+                        };
+                        inSection = true;
+                    } else if (inSection) {
+                        currentSection.content += line + '\n';
+                    } else {
+                        if (!currentSection.title && line.trim().startsWith('#')) {
+                            currentSection.title = line.trim();
+                        } else {
+                            currentSection.content += line + '\n';
+                        }
+                        inSection = true;
+                    }
+                }
+                
+                // Add the last section if it has content
+                if (currentSection.content.trim()) {
+                    sections.push(currentSection);
+                }
+                
+                return sections;
             }
             
             function simulateProgress() {
@@ -249,6 +459,7 @@
                 dropArea.classList.add('hidden');
                 progressContainer.classList.add('hidden');
                 resultContainer.classList.add('hidden');
+                markdownContainer.classList.add('hidden');
                 errorContainer.classList.remove('hidden');
                 errorMessage.textContent = message;
             }
@@ -257,10 +468,14 @@
                 // Reset file input
                 uploadForm.reset();
                 
-                // Hide progress, result, and error containers
+                // Reset current output file
+                currentOutputFile = null;
+                
+                // Hide all containers except drop area
                 progressContainer.classList.add('hidden');
                 resultContainer.classList.add('hidden');
                 errorContainer.classList.add('hidden');
+                markdownContainer.classList.add('hidden');
                 
                 // Show drop area
                 dropArea.classList.remove('hidden');

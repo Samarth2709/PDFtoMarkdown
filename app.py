@@ -55,5 +55,18 @@ def upload_file():
 def download_file(filename):
     return send_file(os.path.join(app.config['OUTPUT_FOLDER'], filename), as_attachment=True)
 
+@app.route('/view_markdown/<filename>')
+def view_markdown(filename):
+    file_path = os.path.join(app.config['OUTPUT_FOLDER'], filename)
+    if not os.path.exists(file_path):
+        return jsonify({'error': 'File not found'}), 404
+    
+    try:
+        with open(file_path, 'r') as file:
+            content = file.read()
+        return jsonify({'content': content})
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
 if __name__ == '__main__':
     app.run(debug=True)
