@@ -62,7 +62,3 @@ python app.py
   - On macOS: `brew install poppler`
   - On Ubuntu/Debian: `apt-get install poppler-utils`
   - On Windows: Download and install from [poppler-windows](https://github.com/oschwartz10612/poppler-windows/releases)
-
-## License
-
-MIT
