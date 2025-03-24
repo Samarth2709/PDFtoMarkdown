@@ -56,10 +56,12 @@ python app.py
 
 ## Known Limitations
 
-- This implementation uses a workaround for PDF to image conversion
-- For better results, consider installing and using the `pdf2image` library
 - Large PDFs may take significant time to process
 - API costs can accumulate with large documents (each page requires a separate API call)
+- You'll need Poppler installed for the pdf2image library to work:
+  - On macOS: `brew install poppler`
+  - On Ubuntu/Debian: `apt-get install poppler-utils`
+  - On Windows: Download and install from [poppler-windows](https://github.com/oschwartz10612/poppler-windows/releases)
 
 ## License
 

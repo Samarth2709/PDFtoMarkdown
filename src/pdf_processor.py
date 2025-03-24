@@ -4,29 +4,29 @@ from PIL import Image
 import io
 from concurrent.futures import ThreadPoolExecutor
 from tqdm import tqdm
-from .openai_api import transcribe_image
+from pdf2image import convert_from_path
+from src.openai_api import transcribe_image
 
 def extract_pages_as_images(pdf_path):
     """Extract each page of a PDF as an image"""
     images = []
     
-    with open(pdf_path, 'rb') as file:
-        pdf_reader = PyPDF2.PdfReader(file)
-        num_pages = len(pdf_reader.pages)
+    try:
+        # Get the number of pages
+        with open(pdf_path, 'rb') as file:
+            pdf_reader = PyPDF2.PdfReader(file)
+            num_pages = len(pdf_reader.pages)
         
         print(f"Extracting {num_pages} pages from PDF...")
         
-        for page_num in range(num_pages):
-            # This is a placeholder - PyPDF2 doesn't directly convert to images
-            # In a real implementation, you would use a library like pdf2image
-            # But for simplicity, we're using a workaround here
-            page = pdf_reader.pages[page_num]
-            # Create a bytes buffer for the PDF page
+        # Convert PDF pages to images using pdf2image
+        pdf_images = convert_from_path(pdf_path, dpi=200)
+        
+        for page_num, img in enumerate(pdf_images):
+            # Create a buffer for each image
             buffer = io.BytesIO()
-            # Create a new PDF with just this page
-            writer = PyPDF2.PdfWriter()
-            writer.add_page(page)
-            writer.write(buffer)
+            # Save the image to the buffer in JPEG format
+            img.save(buffer, format='JPEG')
             buffer.seek(0)
             
             # Add buffer to images list
@@ -34,6 +34,27 @@ def extract_pages_as_images(pdf_path):
                 'page_num': page_num + 1,
                 'buffer': buffer
             })
+    except Exception as e:
+        print(f"Error extracting pages: {str(e)}")
+        # Fallback to the old method if pdf2image fails
+        with open(pdf_path, 'rb') as file:
+            pdf_reader = PyPDF2.PdfReader(file)
+            num_pages = len(pdf_reader.pages)
+            
+            print(f"Falling back to PyPDF2 for {num_pages} pages...")
+            
+            for page_num in range(num_pages):
+                page = pdf_reader.pages[page_num]
+                buffer = io.BytesIO()
+                writer = PyPDF2.PdfWriter()
+                writer.add_page(page)
+                writer.write(buffer)
+                buffer.seek(0)
+                
+                images.append({
+                    'page_num': page_num + 1,
+                    'buffer': buffer
+                })
             
     return images
 
@@ -43,9 +64,17 @@ def process_single_page(page_data):
     buffer = page_data['buffer']
     
     try:
-        # In a real implementation, we would convert the PDF page to an image here
-        # For this example, we're passing the PDF buffer directly to the API function
+        # Send the image buffer to the OpenAI API for transcription
         transcription = transcribe_image(buffer, page_num)
+        
+        # Check if the transcription contains an error message
+        if transcription.startswith("*Error:"):
+            print(f"Error transcribing page {page_num}")
+            return {
+                'page_num': page_num,
+                'content': transcription
+            }
+            
         return {
             'page_num': page_num,
             'content': transcription
